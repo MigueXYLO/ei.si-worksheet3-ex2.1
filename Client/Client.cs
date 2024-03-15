@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using EI.SI;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 
 namespace Client
 {
@@ -22,11 +23,15 @@ namespace Client
         /// </summary>
         static void Main(string[] args)
         {
+            
             byte[] msg;
             IPEndPoint serverEndPoint;
             TcpClient client = null;
             NetworkStream netStream = null;
             ProtocolSI protocol = null;
+            AesCryptoServiceProvider aes = null;
+            SymmetricsSI symmetricsSI = null;
+            
 
             try
             {
@@ -38,6 +43,10 @@ namespace Client
 
                 // Defenitions for TcpClient: IP:port (127.0.0.1:9999)
                 serverEndPoint = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 9999);
+                
+                aes= new AesCryptoServiceProvider();
+                symmetricsSI = new SymmetricsSI(aes);
+
                 #endregion
 
                 Console.WriteLine(SEPARATOR);
@@ -53,14 +62,44 @@ namespace Client
 
                 Console.WriteLine(SEPARATOR);
 
-                #region Exchange Data (Unsecure channel)
+                #region Exchange Secret Key
                 // Send data...
-                string clearData = "hello world!!!";
-                Console.Write("Sending data... ");
-                msg = protocol.Make(ProtocolSICmdType.DATA, clearData);
+                Console.Write("Sending data... ");                
+                msg = protocol.Make(ProtocolSICmdType.SECRET_KEY, aes.Key);
                 netStream.Write(msg, 0, msg.Length);
                 Console.WriteLine("ok.");
-                Console.WriteLine("   Sent: {0} = {1}", clearData, ProtocolSI.ToHexString(Encoding.UTF8.GetBytes(clearData)));
+                Console.WriteLine("   Sent: {0} ",  ProtocolSI.ToHexString(aes.Key));
+
+                // Receive answer from server
+                Console.Write("waiting for ACK... ");
+                netStream.Read(protocol.Buffer, 0, protocol.Buffer.Length);
+                Console.WriteLine("ok.");
+                #endregion
+
+                #region Exchange IV
+                // Send data...
+                Console.Write("Sending data... ");
+                msg = protocol.Make(ProtocolSICmdType.IV, aes.IV);
+                netStream.Write(msg, 0, msg.Length);
+                Console.WriteLine("ok.");
+                Console.WriteLine("   Sent: {0} ", ProtocolSI.ToHexString(aes.IV));
+
+                // Receive answer from server
+                Console.Write("waiting for ACK... ");
+                netStream.Read(protocol.Buffer, 0, protocol.Buffer.Length);
+                Console.WriteLine("ok.");
+                #endregion
+
+                #region Exchange Data ((Un)Secure channel)
+                // Send data...
+                string clearData = "hello world!!!";
+                byte[] clearBytes= Encoding.UTF8.GetBytes(clearData);
+                byte[] encryptedBytes = symmetricsSI.Encrypt(clearBytes);
+                Console.Write("Sending data... ");
+                msg = protocol.Make(ProtocolSICmdType.SYM_CIPHER_DATA, encryptedBytes);
+                netStream.Write(msg, 0, msg.Length);
+                Console.WriteLine("ok.");
+                Console.WriteLine("   Sent: {0} = {1}", clearData, ProtocolSI.ToHexString(encryptedBytes));
 
                 // Receive answer from server
                 Console.Write("waiting for ACK... ");

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using EI.SI;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 
 namespace Server
 {
@@ -28,6 +29,8 @@ namespace Server
             TcpClient client = null;
             NetworkStream netStream = null;
             ProtocolSI protocol = null;
+            AesCryptoServiceProvider aes = null;
+            SymmetricsSI symmetricsSI = null;
 
             try
             {
@@ -39,6 +42,9 @@ namespace Server
 
                 // Client/Server Protocol to SI
                 protocol = new ProtocolSI();
+                
+                aes = new AesCryptoServiceProvider();
+                symmetricsSI = new SymmetricsSI(aes);
 
 
                 #endregion
@@ -59,13 +65,56 @@ namespace Server
 
                 Console.WriteLine(SEPARATOR);
 
-                #region Exchange Data (Unsecure channel)                
+                /*   _____                                           ________
+                 *  !     ! !        !        !      !         !    !   
+                 *  !     ! !        !       ! !      !       !     !
+                 *  !       !________!      !   !      !     !      !________
+                 *  !       !        !     !     !      !   !       !
+                 *  !       !        !    !-------!      ! !        !
+                 *  !_____| !        !   !         !      !         !________
+                 */
+
+                #region Exchange Secret Key                
                 // Receive the cipher data
                 Console.Write("waiting for data... ");
                 netStream.Read(protocol.Buffer, 0, protocol.Buffer.Length);
-                byte[] clearData = protocol.GetData();
+                byte[] secretKey = protocol.GetData();
+                aes.Key = secretKey;
                 Console.WriteLine("ok.");
-                Console.WriteLine("   Received: {0} = {1}", ProtocolSI.ToString(clearData), ProtocolSI.ToHexString(clearData));
+                Console.WriteLine("   Received: {0}", ProtocolSI.ToHexString(secretKey));
+
+                // Answer with a ACK
+                Console.Write("Sending a ACK... ");
+                msg = protocol.Make(ProtocolSICmdType.ACK);
+                netStream.Write(msg, 0, msg.Length);
+                Console.WriteLine("ok.");
+                #endregion
+
+                #region Exchange IV                
+                // Receive the cipher data
+                Console.Write("waiting for data... ");
+                netStream.Read(protocol.Buffer, 0, protocol.Buffer.Length);
+                byte[] iv = protocol.GetData();
+                aes.IV = iv;
+                Console.WriteLine("ok.");
+                Console.WriteLine("   Received: {0}", ProtocolSI.ToHexString(iv));
+
+                // Answer with a ACK
+                Console.Write("Sending a ACK... ");
+                msg = protocol.Make(ProtocolSICmdType.ACK);
+                netStream.Write(msg, 0, msg.Length);
+                Console.WriteLine("ok.");
+                #endregion
+
+                #region Exchange Data (Unsecure channel)                
+                // Receive the cipher data
+
+                Console.Write("waiting for data... ");
+                netStream.Read(protocol.Buffer, 0, protocol.Buffer.Length);
+                byte[] encryptedBytes = protocol.GetData();
+                byte[] clearData = symmetricsSI.Decrypt(encryptedBytes);
+                Console.WriteLine("ok.");
+                Console.WriteLine("   Received: {0} = {1}", ProtocolSI.ToString(clearData), ProtocolSI.ToHexString(encryptedBytes));
 
                 // Answer with a ACK
                 Console.Write("Sending a ACK... ");
