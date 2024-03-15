@@ -112,13 +112,22 @@ namespace Server
                 Console.Write("waiting for data... ");
                 netStream.Read(protocol.Buffer, 0, protocol.Buffer.Length);
                 byte[] encryptedBytes = protocol.GetData();
-                byte[] clearData = symmetricsSI.Decrypt(encryptedBytes);
-                Console.WriteLine("ok.");
-                Console.WriteLine("   Received: {0} = {1}", ProtocolSI.ToString(clearData), ProtocolSI.ToHexString(encryptedBytes));
+                try
+                {
+                    byte[] clearData = symmetricsSI.Decrypt(encryptedBytes);
+                    Console.WriteLine("ok.");
+                    Console.WriteLine("   Received: {0} = {1}", ProtocolSI.ToString(clearData), ProtocolSI.ToHexString(encryptedBytes));
 
-                // Answer with a ACK
-                Console.Write("Sending a ACK... ");
-                msg = protocol.Make(ProtocolSICmdType.ACK);
+                    // Answer with a ACK
+                    Console.Write("Sending a ACK... ");
+                    msg = protocol.Make(ProtocolSICmdType.ACK);
+
+                }
+                catch
+                {
+                    Console.Write("Sending a NACK... ");
+                    msg = protocol.Make(ProtocolSICmdType.NACK);
+                }
                 netStream.Write(msg, 0, msg.Length);
                 Console.WriteLine("ok.");
                 #endregion
